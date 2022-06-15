@@ -63,7 +63,8 @@ def parse_configuration(configuration_file: str) -> (int,Tuple[Tuple]):
              "contrast": preprocessing.fix_contrast,
              "color": preprocessing.fix_color,
              "light": preprocessing.fix_light,
-             "enhance": preprocessing.enhance_detail}
+             "enhance": preprocessing.enhance_detail,
+             "rebalance": preprocessing.rebalance_color}
     expr = "([a-zA-Z]+)\d*"
     pipeline = []
     for key, val in parser["PIPELINE"].items():
