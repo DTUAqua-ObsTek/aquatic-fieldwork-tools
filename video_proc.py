@@ -95,9 +95,11 @@ def main(args: argparse.Namespace):
     workers, pipeline = parse_configuration(args.configuration)
     paths = find_files(args.files, [".mp4", ".avi", ".mkv"], recursive=args.recursive)
     flag = True
+    video_title = "Video (Press q to skip video, esc to exit program. Space to pause/unpause)"
     if args.show:
-        cv2.namedWindow("Video (Press q to skip video, esc to exit program.", cv2.WINDOW_NORMAL)
+        cv2.namedWindow(video_title, cv2.WINDOW_NORMAL)
     print("CTRL+C to exit program.")
+    is_playing = True
     for path in paths:
         try:
             if not flag:
@@ -113,22 +115,25 @@ def main(args: argparse.Namespace):
             [worker.start() for worker in workers]
             frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             for pos in range(frames):
-                ret, frame = cap.read()
-                img = frame.copy()
-                if ret:
-                    for op, params in pipeline:
-                        if isinstance(op, type(preprocessing.const_ar_scale)):
-                            frame = op(frame, *params)
-                        img = op(img, *params)
-                    workers[0].write(img)
-                    if args.show:
-                        cv2.imshow("Video (Press q to skip video, esc to exit program.", np.concatenate((frame, img), axis=1))
+                if is_playing:
+                    ret, frame = cap.read()
+                    img = frame.copy()
+                    if ret:
+                        for op, params in pipeline:
+                            if op == preprocessing.const_ar_scale:
+                                frame = op(frame, *params)
+                            img = op(img, *params)
+                        workers[0].write(img)
+                        if args.show:
+                            cv2.imshow(video_title, np.concatenate((frame, img), axis=1))
                 key = cv2.waitKey(1)
-                if key == ord("q"):
+                if key == ord("q") or key == ord("Q"):
                     break
-                if key == 27:
+                elif key == 27:
                     flag = False
                     break
+                elif key == 32:
+                    is_playing = False if is_playing else True
         except KeyboardInterrupt:
             flag = False
             print("Exiting.")
