@@ -6,6 +6,8 @@
 #BSUB -J videoprocessing
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 1
+### -- ask for a specific cpu
+##BSUB -R "select[model == XeonE5_2650v4]"
 ### -- set walltime limit: hh:mm --  maximum 24 hours for GPU-queues right now
 #BSUB -W 24:00
 # request 16GB of system-memory
