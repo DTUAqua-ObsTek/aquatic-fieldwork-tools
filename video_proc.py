@@ -42,9 +42,8 @@ class VideoWorker(Thread):
                     continue
                 # Pull a frame
                 frame = self._queue.get(True, 0.5)
-            except Full:
-                continue
-            except Empty:
+            except (Full, Empty):
+                self._mutex_lock.release()
                 continue
             # Write with the videowriter
             self._writer.write(frame[0])
