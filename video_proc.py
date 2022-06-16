@@ -64,7 +64,8 @@ def parse_configuration(configuration_file: str) -> (int,Tuple[Tuple]):
              "color": preprocessing.fix_color,
              "light": preprocessing.fix_light,
              "enhance": preprocessing.enhance_detail,
-             "rebalance": preprocessing.rebalance_color}
+             "rebalance": preprocessing.rebalance_color,
+             "add": preprocessing.add_bias}
     expr = "([a-zA-Z]+)\d*"
     pipeline = []
     for key, val in parser["PIPELINE"].items():
@@ -106,16 +107,24 @@ def main(args: argparse.Namespace):
                 break
             cap = cv2.VideoCapture(str(path))
             output_path = path.with_name("colored_"+path.name)
+            width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+            height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            for op, params in pipeline:
+                if op == preprocessing.const_ar_scale:
+                    width = width * params[0]
+                    height = height * params[0]
             writer = cv2.VideoWriter(str(output_path),
                                      cv2.VideoWriter_fourcc(*"mp4v"),
                                      cap.get(cv2.CAP_PROP_FPS),
-                                     (  int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-                                        int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))))
+                                     (  int(width),
+                                        int(height)))
             workers = [VideoWorker(writer) for _ in range(workers)]
             [worker.start() for worker in workers]
             frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            for pos in range(frames):
+            c = 0
+            while c < frames:
                 if is_playing:
+                    c = c + 1
                     ret, frame = cap.read()
                     img = frame.copy()
                     if ret:
