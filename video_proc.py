@@ -1,60 +1,78 @@
 import argparse
+import ast
 import configparser
 import re
 import sys
-import ast
-
-import cv2
-from utils import find_files
-from mosaicking import preprocessing
-import numpy as np
 from queue import SimpleQueue, Full, Empty
 from threading import Thread, Lock
-from typing import List, Tuple
+from typing import Tuple
+
+import cv2
+import numpy as np
+from mosaicking import preprocessing
+
+from utils import find_files
 
 
 class VideoWorker(Thread):
     _queue = SimpleQueue()
     _mutex_lock = Lock()
+    _writer = None
+    counter = 0
 
-    def __init__(self, videowriter: cv2.VideoWriter):
-        self._writer = videowriter
+    def __init__(self):
         self._is_running = False
         super().__init__(target=self._run)
-        print(f"Hi I am {super().getName()}")
 
     def start(self):
+        assert isinstance(self._writer, cv2.VideoWriter), "Call VideoWriter.set_video_writer first!."
         if not self._is_running:
             self._is_running = True
             super().start()
+        else:
+            sys.stderr.write(f"{self.name} already running!\n")
 
     def stop(self):
         if self._is_running:
             self._is_running = False
+        else:
+            sys.stderr.write(f"{self.name} already stopped!\n")
 
-    def write(self, frame: np.ndarray):
-        VideoWorker._queue.put((frame,))
-        # self._queue.put((frame,))
+    @staticmethod
+    def write(packet: Tuple[int, np.ndarray]):
+        VideoWorker._queue.put(packet)
+
+    @classmethod
+    def set_video_writer(cls, writer: cv2.VideoWriter):
+        assert isinstance(writer,
+                          cv2.VideoWriter), "Provide VideoWorker.set_video_writer with an instance of cv2.VideoWriter!"
+        VideoWorker._writer = writer
 
     def _run(self):
         while self._is_running:
             try:
                 # Get a lock
-                if not self._mutex_lock.acquire(True, 0.5):
+                if not VideoWorker._mutex_lock.acquire(True, 0.1):
                     continue
-                print(f"{super().getName()} has lock")
                 # Pull a frame
-                frame = self._queue.get(True, 0.5)
+                frame_number, frame = self._queue.get(True, 0.1)
+                # VideoWorker.counter = frame_number
+                if frame_number != VideoWorker.counter + 1:
+                    self._queue.put((frame_number, frame), True, 0.1)
+                    VideoWorker._mutex_lock.release()
+                    continue
+                else:
+                    VideoWorker.counter = frame_number
             except (Full, Empty):
-                self._mutex_lock.release()
+                VideoWorker._mutex_lock.release()
                 continue
             # Write with the videowriter
-            self._writer.write(frame[0])
+            self._writer.write(frame)
             # Release the mutex
-            self._mutex_lock.release()
+            VideoWorker._mutex_lock.release()
 
 
-def parse_configuration(configuration_file: str) -> (int,Tuple[Tuple]):
+def parse_configuration(configuration_file: str) -> (int, Tuple[Tuple]):
     paths = find_files(configuration_file, ".ini")
     assert len(paths), "Could not find {}.".format(configuration_file)
     parser = configparser.ConfigParser()
@@ -108,7 +126,7 @@ def main(args: argparse.Namespace):
             if not flag:
                 break
             cap = cv2.VideoCapture(str(path))
-            output_path = path.with_name("colored_"+path.name)
+            output_path = path.with_name("colored_" + path.name)
             width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
             height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
             for op, params in pipeline:
@@ -118,10 +136,11 @@ def main(args: argparse.Namespace):
             writer = cv2.VideoWriter(str(output_path),
                                      cv2.VideoWriter_fourcc(*"mp4v"),
                                      cap.get(cv2.CAP_PROP_FPS),
-                                     (  int(width),
-                                        int(height)))
-            workers = [VideoWorker(writer) for _ in range(workers)]
-            [worker.start() for worker in workers]
+                                     (int(width),
+                                      int(height)))
+            writer_workers = [VideoWorker() for _ in range(workers)]
+            VideoWorker.set_video_writer(writer)
+            [worker.start() for worker in writer_workers]
             frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             c = 0
             while c < frames:
@@ -134,7 +153,7 @@ def main(args: argparse.Namespace):
                             if op == preprocessing.const_ar_scale:
                                 frame = op(frame, *params)
                             img = op(img, *params)
-                        workers[0].write(img)
+                        VideoWorker.write((c, img))
                         if args.show:
                             cv2.imshow(video_title, np.concatenate((frame, img), axis=1))
                 key = cv2.waitKey(1)
@@ -149,16 +168,16 @@ def main(args: argparse.Namespace):
             flag = False
             print("Exiting.")
         finally:
-            [worker.stop() for worker in workers]
-            [worker.join() for worker in workers]
+            [worker.stop() for worker in writer_workers]
+            [worker.join() for worker in writer_workers]
             cap.release()
             writer.release()
-            del cap, writer, workers
+            del cap, writer, writer_workers
     if args.show:
         cv2.destroyWindow("Video (Press q to skip video, esc to exit program.")
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("files", nargs="+")
     parser.add_argument("-r", "--recursive", action="store_true")
