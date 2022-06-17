@@ -21,6 +21,7 @@ class VideoWorker(Thread):
         self._writer = videowriter
         self._is_running = False
         super().__init__(target=self._run)
+        print(f"Hi I am {super().getName()}")
 
     def start(self):
         if not self._is_running:
@@ -32,7 +33,8 @@ class VideoWorker(Thread):
             self._is_running = False
 
     def write(self, frame: np.ndarray):
-        self._queue.put((frame,))
+        VideoWorker._queue.put((frame,))
+        # self._queue.put((frame,))
 
     def _run(self):
         while self._is_running:
@@ -40,6 +42,7 @@ class VideoWorker(Thread):
                 # Get a lock
                 if not self._mutex_lock.acquire(True, 0.5):
                     continue
+                print(f"{super().getName()} has lock")
                 # Pull a frame
                 frame = self._queue.get(True, 0.5)
             except Full:
