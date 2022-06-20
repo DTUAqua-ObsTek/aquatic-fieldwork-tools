@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Union, List, Tuple
+from urllib.parse import urlparse
 
 
 def find_files(search_list: Union[str, Path, List[str], List[Path], Tuple[str], Tuple[Path]], ext: Union[str, List[str], Tuple[str]], recursive: bool = False):
