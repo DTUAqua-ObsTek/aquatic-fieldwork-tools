@@ -13,9 +13,12 @@ def find_files(search_list: Union[str, Path, List[str], List[Path], Tuple[str], 
         p = [Path(search_list)]
     paths = []
     for j in p:
-        path = Path(j).resolve()
-        if not path.exists():
-            continue
+        if not str(j).startswith("http"):
+            path = Path(j).resolve()
+            if not path.exists():
+                continue
+        else:
+            path = j
         if path.is_dir():
             if recursive:
                 [paths.extend(path.rglob("*"+e)) for e in ext]
